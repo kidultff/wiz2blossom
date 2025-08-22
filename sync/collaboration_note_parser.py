@@ -443,7 +443,7 @@ class CollaborationNoteParser(NoteParser):
         return file_content
 
     def parse(self, origin_content):
-        log.info(f'协作笔记解析笔记 原始内容: \n {origin_content}')
+        log.debug(f'协作笔记解析笔记 原始内容: \n {origin_content}')
         json_content = json.loads(origin_content)
         text = []
         for block_row in json_content['data']['data']["blocks"]:

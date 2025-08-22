@@ -2,13 +2,14 @@ from log import log
 import requests
 import json
 from websocket import create_connection
+import os
 
 from sync.config import Config
 
 
 class WizOpenApi:
     # account server
-    AS_URL = 'https://as.wiz.cn'
+    AS_URL = os.getenv('AS_URL')
 
     def __init__(self, config: Config):
         self.user_id = config.user_id
@@ -105,6 +106,55 @@ class WizOpenApi:
             raise Exception(f'下载笔记失败: 为知响应报文为:{response.json()}')
         return data
 
+    def get_note_version_list(self, doc_guid):
+        """
+        获取笔记版本信息
+        :param doc_guid: 笔记GUID
+        :return: 版本信息数据
+        """
+        url = f'{self.kb_server}/ks/history/list/{self.kb_guid}/{doc_guid}'
+        params = {
+            'objType': 'document',
+            'clientType': 'web',
+            'clientVersion': '4.0',
+            'lang': 'zh-cn',
+            'objGuid': doc_guid,
+        }
+        response = requests.get(url, params=params, headers={'X-Wiz-Token': self.token})
+        if response.status_code != 200:
+            raise Exception(f'获取笔记版本信息失败: http状态码为:{response.status_code}')
+        data = response.json()
+        if data['returnCode'] != 200:
+            raise Exception(f'获取笔记版本信息失败: 为知响应报文为:{response.json()}')
+        versions = data['result']['versionInfos']
+        log.info(f'{doc_guid} 获取到 {len(versions)} 个版本')
+        return versions
+
+    def get_note_version_content(self, doc_guid, editor_guid, version):
+        """
+        获取笔记指定版本内容
+        :param doc_guid: 笔记GUID
+        :param version: 版本号
+        :return: 版本内容数据
+        """
+        url = f'{self.kb_server}/ks/history/view/{self.kb_guid}/{doc_guid}'
+        params = {
+            'version': version,
+            'editorGuid': editor_guid,
+            'revertClientType': 'web',
+            'revertClientVersion': '4.0',
+            'clientType': 'web',
+            'clientVersion': '4.0',
+            'lang': 'zh-cn',
+        }
+        response = requests.get(url, params=params, headers={'X-Wiz-Token': self.token,})
+        if response.status_code != 200:
+            raise Exception(f'获取笔记版本内容失败: http状态码为:{response.status_code}')
+        data = response.json()
+        if data['returnCode'] != 200:
+            raise Exception(f'获取笔记版本内容失败: 为知响应报文为:{response.json()}')
+        return data['noteData']['html']
+
     def get_note_count(self):
         url = f'{self.kb_server}/ks/kb/info/{self.kb_guid}'
         response = requests.get(url, headers={'X-Wiz-Token': self.token})
@@ -195,24 +245,69 @@ class WizOpenApi:
         s = json.dumps(s_request)
 
         ws.send(hs)
-        log.info(ws.recv())
+        ws.recv()
 
         ws.send(hs)
-        log.info(ws.recv())
+        ws.recv()
 
         ws.send(hs)
-        log.info(ws.recv())
+        ws.recv()
 
         ws.send(f)
-        log.info(ws.recv())
+        ws.recv()
         content = ws.recv()
-        log.info(content)
+        # log.info(content)
 
         ws.send(s)
         ws.recv()
 
         ws.close()
         return content
+
+    def get_collaboration_version_list(self, editor_token, doc_guid):
+        """
+        获取笔记版本列表
+        :param doc_guid: 笔记GUID
+        :return: 版本列表数据
+        """
+        url = f'{self.kb_server}/editor/{self.kb_guid}/{doc_guid}/versions'
+        response = requests.get(url, headers={
+            'cookie': f'x-live-editor-token={editor_token}', 
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'x-live-editor-token': editor_token
+        })
+        if response.status_code != 200:
+            raise Exception(f'获取笔记版本列表失败: http状态码为:{response.status_code}')
+        data = response.json()
+        if 'error' in data:
+            raise Exception(f'获取笔记版本列表失败: 为知响应报文为:{response.json()}')
+        log.info(f'{doc_guid} 获取到 {len(data["versions"])} 个版本')
+        return data['versions']
+
+    def get_collaboration_version_content(self, editor_token, doc_guid, version_id, from_id):
+        """
+        获取笔记版本内容
+        :param doc_guid: 笔记GUID
+        :param version_id: 版本ID
+        :return: 版本内容数据
+        """
+        url = f'{self.kb_server}/editor/{self.kb_guid}/{doc_guid}/versions/before/{version_id}'
+        params = {
+            'from': from_id,
+            'withOp': 'true',
+        }
+        if from_id is None:
+            params.pop('from')
+        response = requests.get(url, headers={
+            'cookie': f'x-live-editor-token={editor_token}', 
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'x-live-editor-token': editor_token
+        }, params=params)
+        data = response.json()
+        if 'error' in data:
+            raise Exception(f'获取笔记版本列表失败: 为知响应报文为:{response.json()}')
+        content = json.loads(data['data'])
+        return json.dumps({'data': {'data': content}})
 
     def get_note_attachments(self, doc_guid):
         """

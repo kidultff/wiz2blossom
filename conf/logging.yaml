@@ -20,5 +20,5 @@ handlers:
     delay: false
 
 root:
-  level: DEBUG
+  level: INFO
   handlers: [console, file]

@@ -9,6 +9,7 @@ from sync.note_parser_factory import NoteParserFactory
 from sync.note_property import NoteProperty
 from sync.parsed_note import ParsedNote
 from sync.wiz_open_api import WizOpenApi
+import os
 
 
 class NoteSynchronizer:
@@ -109,22 +110,38 @@ class NoteSynchronizer:
             # 获取笔记的原始内容
             origin_content = self._get_note_origin_content(record['type'], record['doc_guid'])
 
-            # 使用解析器解析笔记，将笔记转化为md, 并提取笔记中需要上传的图片
-            parsed_note = parser.process_content(origin_content)
-            # 上传并获取上传图片地址
-            origin_img_image_url_map = self._save_img_and_get_url(record, parsed_note.need_upload_images)
+            def _sync_single_note_version(origin_content, version=None):
+                # 使用解析器解析笔记，将笔记转化为md, 并提取笔记中需要上传的图片
+                parsed_note = parser.process_content(origin_content)
+                # 上传并获取上传图片地址
+                origin_img_image_url_map = self._save_img_and_get_url(record, parsed_note.need_upload_images)
 
-            # 替换笔记中的上传图片地址
-            parsed_note.replace_image_url(origin_img_image_url_map)
+                # 替换笔记中的上传图片地址
+                parsed_note.replace_image_url(origin_img_image_url_map)
 
-            # 处理笔记附件方法
-            self._process_note_attachment(record, parsed_note)
+                # 处理笔记附件方法
+                self._process_note_attachment(record, parsed_note)
 
-            # 拼接笔记属性和 md 原文，写入本地文件中
-            note_content = parsed_note.content
-            note_prop = NoteProperty.from_sync_record(record).to_string()
-            joined_note_content = note_prop + note_content
-            FileManager.save_md_to_file(record['category'], record['title'], joined_note_content)
+                # 拼接笔记属性和 md 原文，写入本地文件中
+                note_content = parsed_note.content
+                note_prop = NoteProperty.from_sync_record(record).to_string()
+                joined_note_content = note_prop + note_content
+
+                filename = record['title']
+                if version:
+                    filename += f'__version_{version}'
+                
+                log.info(f'{filename} 保存成功')
+
+                return FileManager.save_md_to_file(record['category'], filename, joined_note_content)
+                
+            _sync_single_note_version(origin_content)
+
+            # 处理历史版本
+            if os.getenv('SAVE_REVISION') == '1':
+                versions_content = self._get_note_history_contents(record['type'], record['doc_guid'])
+                for version in versions_content:
+                    _sync_single_note_version(version['content'], version=version['version'])
 
             # 更新笔记的同步状态
             self.db.update_note_sync_status(record['doc_guid'], sync_status=True, fail_reason='')
@@ -277,3 +294,43 @@ class NoteSynchronizer:
             return self.api_client.get_collaboration_content(collaboration_token, doc_guid)
         detail = self.api_client.get_note_detail(doc_guid)
         return detail['html']
+
+    # 获取版本历史
+    def _get_note_history_contents(self, note_type, doc_guid):
+        versions_content = []
+        if Note.is_collaboration_note(note_type):
+            collaboration_token = self.api_client.get_collaboration_token(doc_guid)
+            versions =  self.api_client.get_collaboration_version_list(collaboration_token, doc_guid)
+            for idx, version in enumerate(versions):
+                try:
+                    if idx == 0:
+                        continue
+                    from_id = None
+                    if idx < len(versions) - 1:
+                        from_id = versions[idx + 1]['version']
+                    content = self.api_client.get_collaboration_version_content(collaboration_token, doc_guid, version['version'], from_id)
+                    versions_content.append({
+                        'version': version['version'],
+                        'content': content
+                    })
+                except Exception as e:
+                    log.error(f"获取协作笔记 {doc_guid} 的 {version['version']} 版本内容失败: {str(e)}")
+                    continue
+            return versions_content
+        versions = self.api_client.get_note_version_list(doc_guid)
+        for idx, version in enumerate(versions):
+            try:
+                if idx == 0:
+                    continue
+                if 'encryption' in version and version['encryption']:
+                    log.warning(f"笔记 {doc_guid} 的 {version['version']} 版本已加密, 跳过处理.")
+                    continue
+                content = self.api_client.get_note_version_content(doc_guid, version['editorGuid'], version['version'])
+                versions_content.append({
+                    'version': version['version'],
+                    'content': content
+                })
+            except Exception as e:
+                log.error(f"获取笔记 {doc_guid} 的 {version['version']} 版本内容失败: {str(e)}")
+                continue
+        return versions_content
