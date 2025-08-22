@@ -1,6 +1,14 @@
 ## 功能
 
-使用python将为知笔记中的所有笔记都导出到本地, 包括历史修订版本，转化为纯markdown文本文件. 支持私有Docker部署的为知笔记和为知盒子. 
+使用python将为知笔记(包括官方服务, 私有Docker部署, 为知盒子)中的数据导出到本地, 并迁移到[Blossom笔记](https://github.com/blossom-editor/blossom/).
+
+可以迁移的内容包括
+
+- 笔记markdown内容
+- 历史修订版本
+- 目录组织架构
+- 笔记内嵌图片
+
 
 ## 前置准备
 
@@ -9,14 +17,20 @@
   - 配置为知笔记的用户名和密码
   - 如果是私有部署版本, 需修改AS_URL为你私有部署的访问地址
   - 配置是否保存历史版本编辑记录, 如果保存, 会在每个笔记同目录下生成`{笔记名}__version_{编辑时间}.md`的版本文件
+  - 配置blossom图床URL，一般是`http{s}://{BLOSSOM_HOST}/pic/home/bl/img/U1`
 - 安装依赖`pip install -r requirements.txt`
-- 运行`python main.py`
+- 运行`python main.py`, 提取所有笔记到 `output/note` 目录下
+- 运行`python import_to_blossom.py`, 将笔记上传到数据库，并修改图片引用
+- 将`output/images`目录复制到blossom的图片目录，一般为blossom目录下的 `img/U1` 文件夹
 
 
 ## 注意
 
 - ** 笔记标题中的特殊字符（如 `/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|` 等）会自动替换为下划线 `_`，确保跨平台兼容性
 - 为知笔记应用不要打开协作笔记tab页, 否则影响程序读取读取该笔记的数据.
+- **本项目未经过充分的测试和验证, 使用前请务必备份blossom数据**
+- **本项目未经过充分的测试和验证, 使用前请务必备份blossom数据**
+- **本项目未经过充分的测试和验证, 使用前请务必备份blossom数据**
 
 
 ## 输出内容
@@ -26,8 +40,9 @@
 │   ├── db
 │   │   └── sync.db // sqlite3 记录笔记同步记录和笔记图片同步记录
 │   ├── note         // 所有导出 markdown 笔记, 图片和附件
-│   └── log
-│       └── log.log // 日志
+│   ├── log
+│   │   └── log.log  // 日志
+│   └── images       // 所有图片, 请手动复制到blossom的图片目录下
 ```
 
 
