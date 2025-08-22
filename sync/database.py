@@ -131,7 +131,7 @@ class Database:
 
         # 将 note_list 转换为 data, 为了 executemany
         data = list(map(lambda note: (note['docGuid'], note['type'], note['title'],
-                                      note['category'], note['created'], note['accessed'],
+                                      note['category'], note['created'], note['dataModified'],
                                       note['url'], 0),
                         note_list))
 
