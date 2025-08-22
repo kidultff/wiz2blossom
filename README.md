@@ -5,7 +5,6 @@
 ## 前置准备
 
 - 将所有加密笔记取消加密
-- [releases 页面](https://github.com/awaken233/wiz2obsidian/releases)下载对应系统的可执行文件
 - 在可执行文件同级目录下创建 `.env` 文件, 参考: [.env.example](.env.example)
   - 配置为知笔记的用户名和密码
   - 如果是私有部署版本, 需修改AS_URL为你私有部署的访问地址
